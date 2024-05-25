@@ -1,0 +1,11 @@
+# Environment
+venv/
+.env
+
+# Editors
+.idea/
+.vscode/
+.nvim/
+
+# Cache files
+*.pycache
