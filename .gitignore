@@ -8,4 +8,7 @@ venv/
 .nvim/
 
 # Cache files
-*.pycache
+*.pyc
+
+# Generated files
+data/
