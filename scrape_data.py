@@ -1,10 +1,21 @@
 import os
 from dotenv import load_dotenv
+import traceback
+import logging
 from datetime import datetime, timedelta
 import aiohttp
 import pandas as pd
 
+files_name = f'daily-usage-{datetime.now().strftime("%d-%m-%Y_%H:%M:%S")}'
+
 load_dotenv()
+logging.basicConfig(filename=f'data/{files_name}.log',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d [%(levelname)s] %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+
+logger = logging.getLogger('Scraper')
 
 CONSTANTS = {
   'BASE_URL': "https://omniscapp.slt.lk/mobitelint/slt/api",
@@ -32,6 +43,22 @@ async def get_daily_usage_previous_months(
   async with aiohttp.ClientSession(headers=HEADERS) as session:
         async with session.get(url) as response:
             data = await response.json()
+            if response.status != 200 or not data['isSuccess']:
+                traceback.print_exception(Exception(
+f"""\033[1;31m
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+\033[0m"""
+                ))
+                logger.error(
+f"""
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+"""
+                )
+                exit(1)
             return data
 
 
@@ -44,6 +71,22 @@ async def get_daily_usage_current_month(
   async with aiohttp.ClientSession(headers=HEADERS) as session:
         async with session.get(url) as response:
             data = await response.json()
+            if response.status != 200 or not data['isSuccess']:
+                traceback.print_exception(Exception(
+f"""\033[1;31m
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+\033[0m"""
+                ))
+                logger.error(
+f"""
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+"""
+                )
+                exit(1)
             return data
 
 
@@ -56,13 +99,32 @@ async def get_protocol_report(
   async with aiohttp.ClientSession(headers=HEADERS) as session:
         async with session.get(url) as response:
             data = await response.json()
+            if response.status != 200 or not data['isSuccess']:
+                traceback.print_exception(Exception(
+f"""\033[1;31m
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+\033[0m"""
+                ))
+                logger.error(
+f"""
+Error occured when requesting for data (Status Code: {response.status}):
+\tError Message from API: {data['errorMessege']}
+\tException Details from API: {data['exceptionDetail']}
+"""
+                )
+                exit(1)
             return data
+
 
 
 async def extract_daily_usage_to_csv():
     print("\033[1mExtracting daily usage stats for each month!")
+    logger.info("Extracting daily usage stats for each month!")
     month_index = 0
     print("Starting data collection...")
+    logger.info("Starting data collection...")
     df_structure = {
         'Date': [],
         'Usage Unit': [],
@@ -80,6 +142,7 @@ async def extract_daily_usage_to_csv():
     print('\033[1;33m')
     while True:
       print(f'[{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}] {month_index: <4}: Attempting to extract data of {current_extraction_date.strftime('%b-%Y')}...\t', end='')
+      logger.debug(f'[{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}] {month_index: <4}: Attempting to extract data of {current_extraction_date.strftime('%b-%Y')}...\t')
       data = await get_daily_usage_previous_months(
           subscriber_id=CONSTANTS['SUBSCRIBER_ID'],
           month_index=month_index
@@ -106,16 +169,20 @@ async def extract_daily_usage_to_csv():
                 df_row_data['Meet Max Package Total Usage'] = package_stats['volume']
               else:
                 print(f'\n\tSkipping package "{package_stats['offer_name']}" as it\'s not included in the list.')
+                logger.warn(f'\n\tSkipping package "{package_stats["offer_name"]}" as it\'s not included in the list.')
         temp_df = temp_df._append(df_row_data, ignore_index=True)
       temp_df = temp_df[1:]
       if len(temp_df[temp_df['Total Usage'] == '0.0']) == len(temp_df):
           print('No more data')
+          logger.debug('No more data')
           break
       else:
           print('Done!')
+          logger.debug('Done!')
       month_index += 1
       stat_df = pd.concat([stat_df, temp_df], ignore_index=True)
       current_extraction_date -= timedelta(days=30)
     print('\033[0m')
-    stat_df.to_csv(f'data/daily-usage-{datetime.now().strftime("%d-%m-%Y_%H:%M:%S")}.csv')
+    stat_df.to_csv(f'data/{files_name}.csv')
     print("\033[1;32mFinished data collection!\033[0m")
+    logger.info('Finished data collection!')
