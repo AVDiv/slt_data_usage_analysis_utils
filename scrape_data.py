@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiohttp
+import pandas as pd
 
 load_dotenv()
 
@@ -57,3 +58,64 @@ async def get_protocol_report(
             data = await response.json()
             return data
 
+
+async def extract_daily_usage_to_csv():
+    print("\033[1mExtracting daily usage stats for each month!")
+    month_index = 0
+    print("Starting data collection...")
+    df_structure = {
+        'Date': [],
+        'Usage Unit': [],
+        'Total Usage': [],
+        'Standard Package Total Usage': [],
+        'Standard Package Peak Download': [],
+        'Standard Package Peak Upload': [],
+        'Standard Package Off-Peak Download': [],
+        'Standard Package Off-Peak Upload': [],
+        'Loyalty Data Total Usage': [],
+        'Meet Max Package Total Usage': []
+    }
+    stat_df = pd.DataFrame(columns=list(df_structure.keys()), index=["Date"])
+    current_extraction_date = datetime.today()
+    print('\033[1;33m')
+    while True:
+      print(f'[{datetime.now().strftime('%d-%m-%Y %H:%M:%S')}] {month_index: <4}: Attempting to extract data of {current_extraction_date.strftime('%b-%Y')}...\t', end='')
+      data = await get_daily_usage_previous_months(
+          subscriber_id=CONSTANTS['SUBSCRIBER_ID'],
+          month_index=month_index
+          )
+      usage_stats = data['dataBundle']['dailylist']
+      temp_df = pd.DataFrame(columns=list(df_structure.keys()), index=["Date"])
+      for usage_stat in usage_stats:
+        df_row_data = {
+            'Date': usage_stat['date'],
+            'Usage Unit': usage_stat['volumeunit'] ,
+            'Total Usage': usage_stat['daily_total_usage']
+        }
+        if usage_stat['usages'] != None:
+          for package_stats in usage_stat['usages']:
+              if package_stats['sorter'] == 1:
+                df_row_data['Standard Package Total Usage'] = package_stats['volume']
+                df_row_data['Standard Package Peak Download'] = package_stats['volumes']['pdl']
+                df_row_data['Standard Package Peak Upload'] = package_stats['volumes']['pul']
+                df_row_data['Standard Package Off-Peak Download'] = package_stats['volumes']['opdl']
+                df_row_data['Standard Package Off-Peak Upload'] = package_stats['volumes']['opul']
+              elif package_stats['offer_name'] == 'Loyalty':
+                df_row_data['Loyalty Data Total Usage'] = package_stats['volume']
+              elif package_stats['offer_name'] == 'Meet Max' or package_stats['offer_name'] == 'Meet Lite':
+                df_row_data['Meet Max Package Total Usage'] = package_stats['volume']
+              else:
+                print(f'\n\tSkipping package "{package_stats['offer_name']}" as it\'s not included in the list.')
+        temp_df = temp_df._append(df_row_data, ignore_index=True)
+      temp_df = temp_df[1:]
+      if len(temp_df[temp_df['Total Usage'] == '0.0']) == len(temp_df):
+          print('No more data')
+          break
+      else:
+          print('Done!')
+      month_index += 1
+      stat_df = pd.concat([stat_df, temp_df], ignore_index=True)
+      current_extraction_date -= timedelta(days=30)
+    print('\033[0m')
+    stat_df.to_csv(f'data/daily-usage-{datetime.now().strftime("%d-%m-%Y_%H:%M:%S")}.csv')
+    print("\033[1;32mFinished data collection!\033[0m")
